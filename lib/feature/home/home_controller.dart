@@ -2,43 +2,65 @@ import 'dart:async';
 
 import 'package:base_riverpod/model/movie_model.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../repository/movie_repository.dart';
-part 'home_controller.g.dart';
-@riverpod
-Future<List<MovieModel>> fetchMovies(
-    FetchMoviesRef ref) async {
-  final moviesRepo = ref.watch(moviesRepositoryProvider);
-  // See this for how the timeout is implemented:
-  // https://codewithandrea.com/articles/flutter-riverpod-data-caching-providers-lifecycle/#caching-with-timeout
-  // Cancel the page request if the UI no longer needs it.
-  // This happens if the user scrolls very fast or if we type a different search
-  // term.
-  final cancelToken = CancelToken();
-  // When a page is no-longer used, keep it in the cache.
-  final link = ref.keepAlive();
-  // a timer to be used by the callbacks below
-  Timer? timer;
-  // When the provider is destroyed, cancel the http request and the timer
-  ref.onDispose(() {
-    cancelToken.cancel();
-    timer?.cancel();
-  });
-  // When the last listener is removed, start a timer to dispose the cached data
-  ref.onCancel(() {
-    // start a 30 second timer
-    timer = Timer(const Duration(seconds: 30), () {
-      // dispose on timeout
-      link.close();
-    });
-  });
-  // If the provider is listened again after it was paused, cancel the timer
-  ref.onResume(() {
-    timer?.cancel();
-  });
-    // use non-search endpoint
-    return moviesRepo.nowPlayingMovies(
+import 'home_state.dart';
+
+
+enum FilterItem {
+  asc,
+  desc
+}
+enum PageStatus { initial, loading, success, failure }
+
+
+class HomeController extends StateNotifier<HomeState> {
+  final MovieRepository repository;
+  HomeController({required this.repository}) : super(const HomeState(movies: [],
+      filter: FilterItem.asc, status: PageStatus.initial));
+
+  fetchData() async {
+    state = state.copyWith(status: PageStatus.loading);
+    final data = await fetchMovies();
+    List<MovieModel> temp = List.from(data);
+    temp.sort((a, b) {
+      return a.title.compareTo(b.title);
+    },);
+    Future.delayed(const Duration(seconds: 60));
+    state = state.copyWith(status: PageStatus.success, movies: temp);
+
+  }
+
+  sortByAsc(){
+    List<MovieModel> temp = List.from(state.movies);
+    temp.sort((a, b) {
+      return a.title.compareTo(b.title);
+    },);
+    state = state.copyWith(filter: FilterItem.asc, movies: temp);
+  }
+
+  sortByDesc(){
+    List<MovieModel> temp = List.from(state.movies);
+    temp.sort((a, b) {
+      return b.title.compareTo(a.title);
+    },);
+    state = state.copyWith(filter: FilterItem.desc, movies: temp);
+  }
+
+  Future<List<MovieModel>> fetchMovies() async {
+    final cancelToken = CancelToken();
+    return repository.nowPlayingMovies(
       cancelToken: cancelToken,
     );
+  }
 }
+
+
+final homePageStateProvider =
+StateNotifierProvider<HomeController, HomeState>(
+      (ref) => HomeController(
+    repository: ref.read(moviesRepositoryProvider),
+  ),
+);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:base_riverpod/flavors/flavor_values.dart';
 import 'package:base_riverpod/model/movie_model.dart';
 import 'package:base_riverpod/model/movie_response_model.dart';
@@ -20,12 +22,14 @@ class MovieRepository {
       host: 'api.themoviedb.org',
       path: '3/movie/now_playing',
       queryParameters: {
-        'api_key': apiKey,
-        'include_adult': 'false',
+        'language': "en-US",
         'page': '1',
       },
     ).toString();
-    final response = await client.get(url, cancelToken: cancelToken);
+    final response = await client.get(url, cancelToken: cancelToken, options: Options(headers: {
+      "Authorization" : apiKey,
+      "accept": "application/json"
+    }));
     final movies = MovieResponseModel.fromJson(response.data);
     return movies.results;
   }
